@@ -1,8 +1,6 @@
 
 # coding: utf-8
 
-# ## import
-
 # In[1]:
 
 
@@ -25,11 +23,7 @@ import time
 import math
 import matplotlib.pyplot as plt
 
-
-# ## setting
-
-# In[2]:
-
+final_fuse = "concat"
 
 conv_1_shape = '4*4*32'
 pool_1_shape = 'None'
@@ -44,62 +38,63 @@ conv_4_shape = '1*1*13'
 pool_4_shape = 'None'
 
 window_size = 128
+n_lstm_layers = 2
+
+# lstm full connected parameter
+n_hidden_state = 32
+#print("\nsize of hidden state", n_hidden_state)
+n_fc_out = 1024
+n_fc_in = 1024
 
 dropout_prob = 0.5
 np.random.seed(32)
 
 norm_type = '2D'
 regularization_method = 'dropout'
-enable_penalty = True
+enable_penalty = False
 
-
-# ## Read-in
-
-# In[4]:
-
-file_dir = '../preprocessed_data'
 cnn_suffix        =".mat_win_128_cnn_dataset.pkl"
+rnn_suffix        =".mat_win_128_rnn_dataset.pkl"
 label_suffix    =".mat_win_128_labels.pkl"
-num_people = 6
-test = 1
+
+L=9
 cnn_datasets=np.empty(shape=[0,128,9,9])
 labels=np.empty(shape=[0,])
-eog_datasets=np.empty(shape=[0,128,2])
-for i in range(num_people):
-    with open(file_dir + 's0'+str(i+test) + cnn_suffix,"rb") as f:
+for i in range(L,L+1):
+    print("i: ",i)
+    with open('/home/yangmx/sample/s0'+str(i)+'.mat_win_128_cnn_dataset.pkl',"rb") as f:
         cnn_dataset = pickle.load(f)
-    with open(file_dir + 's0'+str(i+test) + label_suffix,"rb") as f:
-        label = pickle.load(f)   
-    cnn_datasets=np.concatenate((cnn_datasets,cnn_dataset), axis=0)
+    with open('/home/yangmx/sample/s0'+str(i)+'.mat_win_128_labels.pkl',"rb") as f:
+        label = pickle.load(f)
+    cnn_datasets=np.concatenate((cnn_datasets,cnn_dataset),axis=0)
     labels=np.concatenate((labels,label),axis=0)
-labels_backup = labels
-# one-hot encoding
-labels = np.asarray(pd.get_dummies(labels), dtype=np.int8)
-print("labels shape after one-hot:", np.shape(labels))
-cnn_datasets = cnn_datasets.reshape((len(cnn_datasets), window_size, 9, 9, 1))
+
+
+print(cnn_datasets.shape)
+print(labels.shape)
+
+
+cnn_datasets=np.transpose(cnn_datasets, [0,2,3,1])
+
+print(cnn_datasets.shape)
+print(labels.shape)
+lables_backup = labels
+
+"""
+permutation = np.random.permutation(labels.shape[0])
+labels = labels[permutation]
+lables_backup = labels
+cnn_datasets = cnn_datasets[permutation]
+print("labels shape after shuffle: {0}\ncnn_datasets shape after shuffle: {1}".format(labels.shape, cnn_datasets.shape))
+"""
+
+
+cnn_datasets = cnn_datasets.reshape(len(cnn_datasets), window_size, 9,9, 1)
 print("cnn_dataset shape after reshape:", np.shape(cnn_datasets))
+one_hot_labels = np.array(list(pd.get_dummies(labels)))
 
+labels = np.asarray(pd.get_dummies(labels), dtype=np.int8)
 
-# ## Split train and test
-
-# In[5]:
-
-
-split_index = int((num_people - 1) / num_people * len(cnn_datasets))
-cnn_train_x = cnn_datasets[:split_index]
-cnn_test_x = cnn_datasets[split_index:]
-train_y = labels[:split_index]
-test_y = labels[split_index:]
-index = np.array(range(len(cnn_train_x)))
-np.random.shuffle(index)
-cnn_train_x = cnn_train_x[index]
-train_y = train_y[index]
-print("training samples:{0},\ntest samples:{1},\ntraining labels:{2},\ntest labels:{3}"      .format(cnn_train_x.shape, cnn_test_x.shape, train_y.shape, test_y.shape))
-
-
-# ## hyper-param
-
-# In[6]:
 
 
 # input parameter
@@ -113,9 +108,10 @@ input_width = 9
 n_labels = 2
 # training parameter
 lambda_loss_amount = 0.5
-training_epochs = 30
+training_epochs = 20
 
 batch_size = 35
+
 
 # kernel parameter
 kernel_height_1st = 4
@@ -134,13 +130,7 @@ kernel_stride = 1
 conv_channel_num = 32
 
 # algorithn parameter
-learning_rate = 1e-3
-
-
-# ## variable and layers function
-
-# In[7]:
-
+learning_rate = 1e-4
 
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1)
@@ -155,6 +145,7 @@ def conv2d(x, W, kernel_stride):
     return tf.nn.conv2d(x, W, strides=[1, kernel_stride, kernel_stride, 1], padding='SAME')
 
 def apply_conv2d(x, filter_height, filter_width, in_channels, out_channels, kernel_stride):
+    weight = weight_variable([filter_height, filter_width, in_channels, out_channels])
     weight = weight_variable([filter_height, filter_width, in_channels, out_channels])
     bias = bias_variable([out_channels])  # each feature map shares the same weight and bias
     #print("weight shape:", np.shape(weight))
@@ -186,9 +177,9 @@ def apply_readout(x, x_size, readout_size):
 #print("\n**********(" + time.asctime(time.localtime(time.time())) + ") Define NN structure Begin: **********")
 
 
-# ## place-holder
+# ## CNN-Part-Construction
 
-# In[8]:
+# In[97]:
 
 
 # set placeholder
@@ -197,14 +188,6 @@ model_output = tf.placeholder(tf.float32, shape=[None, n_labels], name="output")
 Y = tf.placeholder(tf.float32, shape=[None, n_labels], name='Y')
 keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 phase_train = tf.placeholder(tf.bool, name='phase_train')
-
-
-# # Graph
-
-# ## CNN-Part-Construction
-
-# In[9]:
-
 
 ###########################################################################################
 # add cnn parallel to network
@@ -235,12 +218,6 @@ print("cnn out shape: ", cnn_out.shape)
 """保留13个通道，这里认为13个通道代表13个不同的高级语义信息，下面Attention模型(先不用multi-head)
 分别在这13个通道上去找时间维度的关系，后进行融合再做分类"""
 
-
-# ## Attention-part
-
-# In[10]:
-
-
 def multi_channel_attention(inputs):
     K = inputs
     Q = inputs
@@ -251,7 +228,7 @@ def multi_channel_attention(inputs):
     return outputs
 
 
-# In[11]:
+# In[99]:
 
 
 def multi_channel_LT(x, output_size, bias=False):
@@ -268,7 +245,7 @@ def multi_channel_LT(x, output_size, bias=False):
     return outputs
 
 
-# In[12]:
+# In[100]:
 
 
 def apply_att_and_LT(inputs):
@@ -280,18 +257,21 @@ def apply_att_and_LT(inputs):
     return att
 
 
-# In[13]:
+# In[105]:
 
 
 cnn_out = tf.transpose(cnn_out, (0,3,1,2))
 att_1 = apply_att_and_LT(cnn_out)
+#att_1 = tf.nn.dropout(att_1, keep_prob)
 att_2 = apply_att_and_LT(att_1)
+#att_2 = tf.nn.dropout(att_2, keep_prob)
 att_3 = apply_att_and_LT(att_2)
+#att_3 = tf.nn.dropout(att_3, keep_prob)
 att_3_shape = att_3.get_shape().as_list()
 att_flatten = tf.reshape(att_3, (-1, att_3_shape[1] * att_3_shape[2] * att_3_shape[3]))
 att_flatten_shape = att_flatten.get_shape().as_list()
 print("after flatten shape: ", att_flatten_shape)
-att_out = apply_fully_connect(att_flatten, att_flatten_shape[-1], 1024)
+att_out = apply_fully_connect_relu(att_flatten, att_flatten_shape[-1], 1024)
 att_out = apply_readout(att_out, 1024, n_labels)
 print("attention network output shape: ", att_out.shape)
 y_ = att_out
@@ -299,9 +279,6 @@ y_pred = tf.argmax(tf.nn.softmax(y_), 1, name="y_pred")
 y_posi = tf.nn.softmax(y_, name="y_posi")
 
 # ## cost and optimizer
-
-# In[14]:
-
 
 # l2 regularization
 l2 = lambda_loss_amount * sum(
@@ -329,33 +306,70 @@ print("\n**********(" + time.asctime(time.localtime(time.time())) + ") Define NN
 print("\n**********(" + time.asctime(time.localtime(time.time())) + ") Train and Test NN Begin: **********")
 
 
-
-
-# In[15]:
-
-
-batch_num_per_epoch = math.floor(cnn_train_x.shape[0]/batch_size)+ 1
-accuracy_batch_size = batch_size
-train_accuracy_batch_num = batch_num_per_epoch
-test_accuracy_batch_num = math.floor(cnn_test_x.shape[0]/batch_size)+ 1
-
-
-# # Session
-
 # In[ ]:
 
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
-config.gpu_options.per_process_gpu_memory_fraction = 0.7
+config.gpu_options.per_process_gpu_memory_fraction = 0.8
+
 merged = tf.summary.merge_all()
 logdir = "my_tensorboard"
 train_writer = tf.summary.FileWriter("log/"+logdir+"/train")
 test_writer = tf.summary.FileWriter("log/"+logdir+"/test")
-with tf.Session() as session:
+
+"""fold = 10
+for curr_fold in range(fold):
+    fold_size = cnn_datasets.shape[0]//fold
+    indexes_list = [i for i in range(len(cnn_datasets))]
+    indexes = np.array(indexes_list)
+    split_list = [i for i in range(curr_fold*fold_size,(curr_fold+1)*fold_size)]
+    split = np.array(split_list)
+    cnn_test_x = cnn_datasets[split] 
+    test_y = labels[split]
+
+    split = np.array(list(set(indexes_list)^set(split_list)))
+    cnn_train_x = cnn_datasets[split]
+    train_y = labels[split]
+    train_sample = train_y.shape[0]
+    print("training examples:", train_sample)
+    test_sample = test_y.shape[0]
+    print("test examples    :",test_sample)
+"""
+shuffle = np.random.permutation(len(cnn_datasets))
+cnn_datasets = cnn_datasets[shuffle]
+labels = labels[shuffle]
+
+split_index = int(4 / 5 * len(cnn_datasets))
+cnn_train_x = cnn_datasets[:split_index]
+cnn_test_x = cnn_datasets[split_index:]
+train_y = labels[:split_index]
+test_y = labels[split_index:]
+"""
+shuffle = np.array(range(len(cnn_train_x)))
+cnn_train_x = cnn_train_x[shuffle]
+train_y = train_y[shuffle]
+"""
+
+
+# set train batch number per epoch
+batch_num_per_epoch = math.floor(cnn_train_x.shape[0]/batch_size)+ 1
+
+# set test batch number per epoch
+accuracy_batch_size = batch_size
+train_accuracy_batch_num = batch_num_per_epoch
+test_accuracy_batch_num = math.floor(cnn_test_x.shape[0]/batch_size)+ 1
+
+# print label
+one_hot_labels = np.array(list(pd.get_dummies(lables_backup)))
+print(one_hot_labels)
+
+with tf.Session(config=config) as session:
+    train_writer.add_graph(session.graph)
     count_cost = 0
     train_count_accuracy = 0
     test_count_accuracy = 0
+
     session.run(tf.global_variables_initializer())
     train_accuracy_save = np.zeros(shape=[0], dtype=float)
     test_accuracy_save = np.zeros(shape=[0], dtype=float)
@@ -365,8 +379,8 @@ with tf.Session() as session:
         print("learning rate: ",learning_rate)
         cost_history = np.zeros(shape=[0], dtype=float)
         for b in range(batch_num_per_epoch):
-            start = b * batch_size
-            if (b+1) * batch_size > train_y.shape[0]:
+            start = b* batch_size
+            if (b+1)*batch_size>train_y.shape[0]:
                 offset = train_y.shape[0] % batch_size
             else:
                 offset = batch_size
@@ -375,8 +389,8 @@ with tf.Session() as session:
             cnn_batch = cnn_batch.reshape(len(cnn_batch) * window_size, 9, 9, 1)
             batch_y = train_y[start:(start + offset), :]
             _ , c = session.run([optimizer, cost],
-                               feed_dict={cnn_in: cnn_batch, Y: batch_y, keep_prob: 1 - dropout_prob,
-                                          phase_train: True})
+                                feed_dict={cnn_in: cnn_batch, Y: batch_y, keep_prob: 1 - dropout_prob,
+                                            phase_train: True})
             cost_history = np.append(cost_history, c)
             count_cost += 1
         if (epoch % 1 == 0):
@@ -397,23 +411,17 @@ with tf.Session() as session:
                 train_batch_y = train_y[start:(start + offset), :]
 
                 tf_summary,train_a, train_c = session.run([merged,accuracy, cost],
-                                               feed_dict={cnn_in: train_cnn_batch,
-                                                          Y: train_batch_y, keep_prob: 1.0, phase_train: False})
+                                                feed_dict={cnn_in: train_cnn_batch,
+                                                            Y: train_batch_y, keep_prob: 1.0, phase_train: False})
                 train_writer.add_summary(tf_summary,train_count_accuracy)
                 train_loss = np.append(train_loss, train_c)
                 train_accuracy = np.append(train_accuracy, train_a)
                 train_count_accuracy += 1
             print("(" + time.asctime(time.localtime(time.time())) + ") Epoch: ", epoch + 1, " Training Cost: ",
-                  np.mean(train_loss), "Training Accuracy: ", np.mean(train_accuracy))
+                    np.mean(train_loss), "Training Accuracy: ", np.mean(train_accuracy))
             train_accuracy_save = np.append(train_accuracy_save, np.mean(train_accuracy))
             train_loss_save = np.append(train_loss_save, np.mean(train_loss))
-
-            if(np.mean(train_accuracy)<0.8):
-                learning_rate=1e-4
-            elif(0.8<np.mean(train_accuracy)<0.85):
-                learning_rate=5e-5
-            elif(0.85<np.mean(train_accuracy)):
-                learning_rate=5e-6
+            learning_rate=5e-6
 
             for j in range(test_accuracy_batch_num):
                 start = j * batch_size
@@ -428,29 +436,24 @@ with tf.Session() as session:
                 test_batch_y = test_y[start:(start + offset), :]
 
                 tf_test_summary,test_a, test_c = session.run([merged,accuracy, cost],
-                                             feed_dict={cnn_in: test_cnn_batch, Y: test_batch_y,
+                                                feed_dict={cnn_in: test_cnn_batch, Y: test_batch_y,
                                                         keep_prob: 1.0, phase_train: False})
                 test_writer.add_summary(tf_test_summary,test_count_accuracy)
                 test_accuracy = np.append(test_accuracy, test_a)
                 test_loss = np.append(test_loss, test_c)
                 test_count_accuracy += 1 
             print("(" + time.asctime(time.localtime(time.time())) + ") Epoch: ", epoch + 1, " Test Cost: ",
-                  np.mean(test_loss), "Test Accuracy: ", np.mean(test_accuracy), "\n")
+                    np.mean(test_loss), "Test Accuracy: ", np.mean(test_accuracy), "\n")
             test_accuracy_save = np.append(test_accuracy_save, np.mean(test_accuracy))
             test_loss_save = np.append(test_loss_save, np.mean(test_loss))
-        # reshuffle
-        index = np.array(range(0, len(train_y)))
-        np.random.shuffle(index)
-        cnn_train_x=cnn_train_x[index]
-        train_y=train_y[index]
-
         # learning_rate decay
         if(np.mean(train_accuracy)<0.9):
-            learning_rate=1e-3
+            learning_rate=1e-4
         elif(0.9<np.mean(train_accuracy)<0.95):
             learning_rate=5e-5
         elif(0.99<np.mean(train_accuracy)):
             learning_rate=5e-6
+
     test_accuracy = np.zeros(shape=[0], dtype=float)
     test_loss = np.zeros(shape=[0], dtype=float)
     test_pred = np.zeros(shape=[0], dtype=float)
@@ -467,7 +470,8 @@ with tf.Session() as session:
         test_batch_y = test_y[start:(start + offset), :]
 
         test_a, test_c, test_p, test_r = session.run([accuracy, cost, y_pred, y_posi],
-                                                     feed_dict={cnn_in: test_cnn_batch, Y: test_batch_y, keep_prob: 1.0, phase_train: False})
+                                                        feed_dict={cnn_in: test_cnn_batch,
+                                                                Y: test_batch_y, keep_prob: 1.0, phase_train: False})
         test_t = test_batch_y
 
         test_accuracy = np.append(test_accuracy, test_a)
@@ -477,25 +481,8 @@ with tf.Session() as session:
         test_posi = np.vstack([test_posi, test_r])
     test_pred_1_hot = np.asarray(pd.get_dummies(test_pred), dtype=np.int8)
     test_true_list = tf.argmax(test_true, 1).eval()
-    print(test_loss)
-    # recall
-    #test_recall = recall_score(test_true, test_pred_1_hot, average=None)
-    # precision
-    #test_precision = precision_score(test_true, test_pred_1_hot, average=None)
-    # f1 score
-    #test_f1 = f1_score(test_true, test_pred_1_hot, average=None)
-     # confusion matrix
-    # confusion_matrix = confusion_matrix(test_true_list, test_pred)
-    #print("********************recall:", test_recall)
-    #print("*****************precision:", test_precision)
-    #print("******************f1_score:", test_f1)
-    print("(" + time.asctime(time.localtime(time.time())) + ") Final Test Cost: ", np.mean(test_loss),
-              "Final Test Accuracy: ", np.mean(test_accuracy))
-    saver = tf.train.Saver()
-    saver.save(session,                    "./model_attetntion")
 
 
-# In[ ]:
 
 epochs = range(1, len(train_accuracy_save) + 1)
 plt.switch_backend('agg')
@@ -508,7 +495,7 @@ plt.title('Training and test accuracy')
 plt.xlabel('Epochs')
 plt.ylabel('Accuracy')
 plt.legend()
-figure1.savefig('../picture/curve_accuracy_34.jpg')
+figure1.savefig('./curve_accuracy_678_9.jpg')
 figure2 = plt.figure(dpi = 128)
 plt.plot(epochs, train_loss_save, 'bo', label='Training loss')
 # b is for "solid blue line"
@@ -517,4 +504,4 @@ plt.title('Training and test loss')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
-figure2.savefig('../picture/curve_loss_34.jpg')
+figure2.savefig('./curve_loss_678_9.jpg')
