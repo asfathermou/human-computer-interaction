@@ -15,7 +15,7 @@
 ### 1.目标
 本任务的主要目标是对在提取了交互者的生理信号下，对交互做出情感类的判别，所以这里的情感识别主要指的还是分类问题。本任务还是一个比较具有实时性的任务，主要是仅仅基于1秒的信号进行分类。
 ### 2.数据集
-本任务提供了两个数据集：DEAP(http://www.eecs.qmul.ac.uk/mmv/datasets/deap/readme.html)和SEED(http://bcmi.sjtu.edu.cn/home/seed/download.html)，下面分别对这两个数据集做简要描述：
+本任务提供了两个数据集：[DEAP](http://www.eecs.qmul.ac.uk/mmv/datasets/deap/readme.html)和[SEED](http://bcmi.sjtu.edu.cn/home/seed/download.html)，下面分别对这两个数据集做简要描述：
 
  1. DEAP:
 DEAP数据集是基于32个实验对象随机观看了40个1分钟左右的音乐视频，记录了实验对象的生理信号，并且给出了三个方面的情感评价，分别是:Valence(效价)、Arousal(唤醒度)、Dominace(支配度?)，分别用1~9的整数表示。记录的生理信号经过预处理(下采样合并通道等方式)有40个通道，其中前32个通道是脑电EEG信号，33、34通道分别是眼动EOG信号，剩下的是其他生理信号(本作业没有采用)。
@@ -38,11 +38,11 @@ SEED数据集的分类目标是1个四分类问题。
  3. 3dCNN：将时域信息也采用CNN做提取。
  我们最后选择2dCNN并联1dLSTM作为基本模型，并基于它进行了初步实验。
 参考文章：
-1.https://ieeexplore.ieee.org/document/7822545/
-2.http://arxiv.org/abs/1708.06578
-3.https://arxiv.org/abs/1704.08619
+1. https://ieeexplore.ieee.org/document/7822545/
+2. http://arxiv.org/abs/1708.06578
+3. https://arxiv.org/abs/1704.08619
 ### 多模态特征融合：
- 依据文章(https://dl.acm.org/citation.cfm?id=2832411)里的结论，即眼动信号和EEG信号成某种程度上的互补关系，我们的多模态实验主要基于的是眼动数据EOG。而多模态融合思路主要采用了特征层的融合，将EEG和EOG分别提取特征后在某一层进行concatenation。
+ 依据[文章](https://dl.acm.org/citation.cfm?id=2832411)里的结论，即眼动信号和EEG信号成某种程度上的互补关系，我们的多模态实验主要基于的是眼动数据EOG。而多模态融合思路主要采用了特征层的融合，将EEG和EOG分别提取特征后在某一层进行concatenation。
 
 ---
 
