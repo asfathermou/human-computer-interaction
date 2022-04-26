@@ -37,10 +37,12 @@ SEED数据集的分类目标是1个四分类问题。
  2. 2dCNN串联1dLSTM：利用卷积网络逐帧提取空间域信息得到特征序列，并将特征序列利用LSTM进行特征提取。
  3. 3dCNN：将时域信息也采用CNN做提取。
  我们最后选择2dCNN并联1dLSTM作为基本模型，并基于它进行了初步实验。
-参考文章：
-1. https://ieeexplore.ieee.org/document/7822545/
-2. http://arxiv.org/abs/1708.06578
-3. https://arxiv.org/abs/1704.08619
+
+ 参考文章：
+  1. https://ieeexplore.ieee.org/document/7822545/
+  2. http://arxiv.org/abs/1708.06578
+  3. https://arxiv.org/abs/1704.08619
+
 ### 多模态特征融合：
  依据[文章](https://dl.acm.org/citation.cfm?id=2832411)里的结论，即眼动信号和EEG信号成某种程度上的互补关系，我们的多模态实验主要基于的是眼动数据EOG。而多模态融合思路主要采用了特征层的融合，将EEG和EOG分别提取特征后在某一层进行concatenation。
 
